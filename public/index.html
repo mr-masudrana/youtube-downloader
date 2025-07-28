@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YouTube Downloader</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background: linear-gradient(to right, #ffffff, #ffe5e5);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border: 2px solid #ff0000;
+      border-radius: 16px;
+      padding: 30px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 0 30px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    h1 {
+      color: #ff0000;
+      margin-bottom: 25px;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 13px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📥 YouTube Video Downloader</h1>
+    <form action="/download" method="POST" id="downloadForm">
+      <div class="mb-3">
+        <input
+          type="text"
+          name="url"
+          class="form-control"
+          placeholder="Paste YouTube video link here..."
+          required
+        />
+      </div>
+      <div class="mb-3">
+        <label for="format" class="form-label">Select Format</label>
+        <select name="format" id="format" class="form-select" required>
+          <option value="mp4" selected>Video (MP4)</option>
+          <option value="mp3">Audio (MP3)</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="quality" class="form-label">Select Quality</label>
+        <select name="quality" id="quality" class="form-select" required>
+          <option value="highest" selected>Highest</option>
+          <option value="lowest">Lowest</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-danger w-100">Download</button>
+    </form>
+    <div class="footer">
+      For educational use only · Powered by Node.js, ytdl-core & ffmpeg
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
