@@ -14,6 +14,26 @@ function validateYouTubeUrl(url) {
   return pattern.test(url);
 }
 
+function setLoadingState(isLoading) {
+  if (isLoading) {
+    searchBtn.disabled = true;
+    searchBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Loading...`;
+  } else {
+    searchBtn.disabled = false;
+    searchBtn.innerHTML = `<i class="fas fa-search"></i> Search`;
+  }
+}
+
+function setDownloadLoading(button, isLoading, label) {
+  if (isLoading) {
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Downloading...`;
+  } else {
+    button.disabled = false;
+    button.innerHTML = label;
+  }
+}
+
 searchBtn.addEventListener('click', async () => {
   const url = videoUrlInput.value.trim();
   errorMsg.textContent = '';
@@ -32,8 +52,7 @@ searchBtn.addEventListener('click', async () => {
     return;
   }
 
-  searchBtn.disabled = true;
-  loadingSpinner.style.display = 'block';
+  setLoadingState(true);
 
   try {
     const response = await fetch('/video-info', {
@@ -41,6 +60,8 @@ searchBtn.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
+
+    if (!response.ok) throw new Error('Network response was not ok');
 
     const data = await response.json();
 
@@ -50,39 +71,56 @@ searchBtn.addEventListener('click', async () => {
       return;
     }
 
-    videoTitle.textContent = data.title;
-    thumbnail.src = data.thumbnail;
-
+    videoTitle.textContent = data.title || 'Untitled Video';
+    thumbnail.src = data.thumbnail || '';
     formatsDiv.innerHTML = '';
 
-    data.formats.forEach(format => {
-      let label = '';
-      if (format.resolution === 'Audio') {
-        label = 'MP3 (Audio)';
-      } else if (format.resolution) {
-        label = `${format.resolution}p`;
-      } else {
-        label = format.ext.toUpperCase();
-      }
+    if (!data.formats || data.formats.length === 0) {
+      formatsDiv.innerHTML = `<p class="text-warning fw-bold">No downloadable formats available.</p>`;
+    } else {
+      data.formats.forEach(format => {
+        let label, icon, download;
 
-      const btn = document.createElement('button');
-      btn.textContent = label;
-      btn.className = 'format-btn';
-      btn.onclick = () => {
-        const downloadUrl = `/download?url=${encodeURIComponent(url)}&format_id=${format.format_id}`;
-        window.location.href = downloadUrl;
-      };
-      formatsDiv.appendChild(btn);
-    });
+        if (format.resolution === 'Audio') {
+          label = 'Audio';
+          icon = '<i class="fas fa-music"></i>';
+          download = '<i class="fas fa-download"></i>';
+        } else if (format.resolution) {
+          label = `${format.resolution}p`;
+          icon = '<i class="fas fa-video"></i>';
+          download = '<i class="fas fa-download"></i>';
+        } else {
+          label = format.ext.toUpperCase();
+          icon = '<i class="fas fa-file-video"></i>';
+          download = '<i class="fas fa-download"></i>';
+        }
+
+        const btn = document.createElement('button');
+        btn.innerHTML = `${icon} ${label} ${download}`;
+        btn.className = 'btn btn-outline-info rounded-pill fw-semibold d-flex justify-content-around align-items-center w-75';
+        btn.onclick = () => {
+          setDownloadLoading(btn, true, `${icon} ${label} ${download}`);
+          const downloadUrl = `/download?url=${encodeURIComponent(url)}&format_id=${format.format_id}`;
+          // Start download
+          window.location.href = downloadUrl;
+
+          // Restore button after short delay
+          setTimeout(() => {
+            setDownloadLoading(btn, false, `${icon} ${label} ${download}`);
+          }, 5000); // Adjust timing as needed
+        };
+        formatsDiv.appendChild(btn);
+      });
+    }
 
     resultDiv.style.display = 'block';
-    resultDiv.focus();
+    resultDiv.scrollIntoView({ behavior: 'smooth' });
 
   } catch (err) {
-    errorMsg.textContent = 'Failed to fetch video info. Please try again.';
+    console.error(err);
+    errorMsg.textContent = 'Failed to fetch video info. Please check your connection and try again.';
   } finally {
-    searchBtn.disabled = false;
-    loadingSpinner.style.display = 'none';
+    setLoadingState(false);
   }
 });
 
@@ -96,7 +134,6 @@ copyLinkBtn.addEventListener('click', () => {
   }
 });
 
-// Enter key triggers search
 videoUrlInput.addEventListener('keyup', (event) => {
   if (event.key === 'Enter') {
     searchBtn.click();
