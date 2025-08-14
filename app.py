@@ -1,15 +1,17 @@
 from flask import Flask, request, render_template, jsonify, send_file
-import subprocess
 import os
-import uuid
+import re
 from yt_dlp import YoutubeDL
 
 app = Flask(__name__)
 
+def sanitize_filename(name):
+    """ফাইলনেম থেকে অবৈধ চিহ্ন মুছে ফেলা"""
+    return re.sub(r'[\\/*?:"<>|]', "_", name)
+
 @app.route('/')
 def index():
     return render_template('index.html')
-
 
 @app.route('/video-info', methods=['POST'])
 def video_info():
@@ -30,11 +32,8 @@ def video_info():
 
         formats = []
         for f in info.get('formats', []):
-            # শুধু mp4 ভিডিও ফরম্যাট বা mp3 অডিও ফরম্যাট নিয়ে আসা
             if f.get('ext') in ['mp4', 'm4a', 'webm', 'mp3']:
-                # রেজোলিউশন ও অডিও আলাদা আলাদা করা
                 if f.get('vcodec') != 'none':
-                    # ভিডিও ফরম্যাট
                     formats.append({
                         "format_id": f['format_id'],
                         "ext": f['ext'],
@@ -42,7 +41,6 @@ def video_info():
                         "filesize": f.get('filesize') or 0
                     })
                 elif f.get('acodec') != 'none' and f.get('vcodec') == 'none':
-                    # অডিও ফরম্যাট (mp3 বা m4a)
                     formats.append({
                         "format_id": f['format_id'],
                         "ext": f['ext'],
@@ -50,16 +48,17 @@ def video_info():
                         "filesize": f.get('filesize') or 0
                     })
 
-        # ফরম্যাট গুলো থেকে রেজোলিউশন অনুযায়ী সাজানো
-        # শুধু ইউনিক রেজোলিউশন দেখানোর জন্য dictionary তে কন্ট্রোল দিতে পারেন
-
         unique_formats = {}
         for f in formats:
             key = f['resolution']
             if key not in unique_formats:
                 unique_formats[key] = f
 
-        sorted_formats = sorted(unique_formats.values(), key=lambda x: (x['resolution'] if isinstance(x['resolution'], int) else 0), reverse=True)
+        sorted_formats = sorted(
+            unique_formats.values(),
+            key=lambda x: (x['resolution'] if isinstance(x['resolution'], int) else 0),
+            reverse=True
+        )
 
         return jsonify({
             "title": info.get('title'),
@@ -70,7 +69,6 @@ def video_info():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/download', methods=['GET'])
 def download():
     video_url = request.args.get('url')
@@ -79,27 +77,48 @@ def download():
     if not video_url or not format_id:
         return "Missing URL or format", 400
 
-    filename = f"{uuid.uuid4()}.%(ext)s"
+    # ভিডিওর ইনফো নেওয়া
+    with YoutubeDL({'quiet': True}) as ydl:
+        info = ydl.extract_info(video_url, download=False)
+
+    title = sanitize_filename(info.get('title', 'video'))
+    file_ext = "mp4"
+    resolution = ''
+
+    # নির্দিষ্ট format_id এর resolution বের করা
+    for f in info.get('formats', []):
+        if f['format_id'] == format_id:
+            if f.get('vcodec') == 'none':  # শুধু অডিও হলে
+                file_ext = f['ext']
+                resolution = "audio"
+            else:
+                resolution = f.get('height', '')
+            break
+
+    resolution_text = f"{resolution}p" if isinstance(resolution, int) else resolution
+    output_filename = f"{title}-{resolution_text}.{file_ext}"
 
     ydl_opts = {
         'quiet': True,
-        'outtmpl': filename,
-        'format': format_id
+        'outtmpl': output_filename,
+        'merge_output_format': file_ext
     }
+
+    # অডিও + ভিডিও একসাথে বা শুধু অডিও
+    if file_ext == "mp4":
+        ydl_opts['format'] = f"{format_id}+bestaudio/best"
+    else:
+        ydl_opts['format'] = format_id
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(video_url, download=True)
-            downloaded_filename = ydl.prepare_filename(info_dict)
-        return send_file(downloaded_filename, as_attachment=True)
+            ydl.download([video_url])
+        return send_file(output_filename, as_attachment=True)
     except Exception as e:
         return str(e), 500
     finally:
-        # ডাউনলোড হয়ে গেলে ফাইল ডিলিট করুন
-        if os.path.exists(downloaded_filename):
-            os.remove(downloaded_filename)
+        if os.path.exists(output_filename):
+            os.remove(output_filename)
 
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=False)
